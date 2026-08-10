@@ -1,0 +1,231 @@
+SFEX Animation Format:
+
+header:
+first word: first meta data entry directly after header end
+remaining words are offsets to others meta data entries
+00 00 00 08 or 01 00 00 08 ->  delemiter value between meta data
+
+meta data:
+first word: entries length
+second word: if zeroed it does cancel the frame duration value
+a value of 0x02 enable the frame duration
+the values 0x06, 0x0A, 0x0E make the character move weirdly and enable the frame duration
+any other value make the character jump or cancel the frame duration value
+starting from word 3, there is a series of two words entries: frame duration / frame data offset
+equal to the entries length value
+actually the frame duration is divided in two half (two short) the first is the duration,
+the second is which hands meshes to use
+at the end of each meta data entry there is a delemiter value: 00 00 00 08 or 01 00 00 08
+preceded by two words: an unknown word value, probably last frame data offset, and a zero word
+also 01 00 00 08 means: loop animation and  00 00 00 08 means: do not loop
+
+frame data:
+
+first three short int (two bytes each) of the first frame data is the root axis shift position
+then come two short int for root axis rotation and the rest of data are bones rotations angles
+the root axis shift position is three short only for the first frame, for the rest it is three bytes only
+the first frame's root axis shift position is how much the character's cenrer (root) shift from the ground-up
+the rest of the frames's root axis shift position are accumulative delta values, they simulates
+inverse kinematic to grounds the character, if they are not applied the character's animations will
+be ungrounded and he will looks like floating, also the delta values are in z y x format and must be negated before used
+
+all bones have 1 word (4 bytes) for rotation, except shoulders which have 2 words, so
+they translates 2 times and rotates 2 times around 3 axis
+
+all meshes must be rotated 90 degrees around Y axis, and 180 degrees around Z axis
+before applying any rotation.
+also the bones rotations angles and initial positions must be negated before used
+
+
+the rotations are in this order:
+
+number of short int:   mesh:
+2                      root axis rotation
+2                      lower torso
+2                      upper torso
+2                      head
+4                      right shoulder
+2                      right elbow
+2                      right hand
+4                      left shoulder
+2                      left elbow 
+2                      left hand
+2                      waist
+2                      right hip
+2                      right knee
+2                      right feet
+2                      left hip
+2                      left knee
+2                      left feet
+
+
+rotation format:
+Angle 1 (Roll): Bits 7-5 of Byte 0 + Byte 1
+
+
+Angle 2 (Yaw): Bits 4-2 of Byte 0 + Byte 2
+
+
+Angle 3 (Pitch): Bits 1-0 of Byte 0 + Byte 3
+
+    // Angle 1 (Roll): Top 3 bits of Byte 0 are high bits, Byte 1 is low bits
+    // Logic: ( (Byte0 >> 5) << 8 + Byte1 ) * 2
+    int angle1 = (((b0 >> 5) << 8) | b1) * 2;
+
+    // Angle 2 (Yaw): Middle 3 bits of Byte 0 are high bits, Byte 2 is low bits
+    // Logic: ( ((Byte0 << 6) & 0x700) >> 8 is the high bit, but easier to mask Byte 0: )
+    int angle2 = ((((b0 & 0x1C) >> 2) << 8) | b2) * 2;
+
+    // Angle 3 (Pitch): Bottom 2 bits of Byte 0 are high bits, Byte 3 is low bits
+    // Logic: ( (Byte0 & 0x03) << 8 + Byte3 ) * 4
+    int angle3 = (((b0 & 0x03) << 8) | b3) * 4;
+
+    // to convert to degrees, multiply by (360.0 / 4096.0)
+
+in ZYX format
+
+bones initial positions and hierarchy:
+at vram address 0x801B4C68 (at position 0xB4468 in the executable file) in the european version, there is an array of structs defining the bones initial positions and hierarchy, it is defined as follow:
+
+typedef struct
+{
+    Vector3D* intial_position;
+    BoneMap*  children_info;
+    int       joints_count;
+}BoneInfo;
+
+where Vector3D and BoneMap are defined as follow:
+
+typedef struct
+{
+    int16_t x, y, z;
+}Vector3D;
+
+typedef struct
+{
+    uint8_t children_count;
+    uint8_t children_indexes[7];
+}BoneMap;
+
+
+Vector3D* intial_position is pointer to an array of bones meshes initial position / axis shift
+BoneMap* children_info is a pointer to an array bones joints children indexes
+
+the numbers of Vector3D intial_position, and BoneMap children_info for each character is equal
+to joints_count variable
+
+the initial positions / translations must be scaled like so before they are used:
+
+    int16_t x = (int16_t) ((int32_t) (init_pos->x * 0xF) >> 7);
+    int16_t y = (int16_t) ((int32_t) (init_pos->y * 0xF) >> 7);
+    int16_t z = (int16_t) ((int32_t) (init_pos->z * 0xF) >> 7);
+
+
+the the initial positions / translations are in this order:
+
+number of short int:   mesh:
+3                      root
+3                      lower torso
+3                      upper torso
+3                      head
+6                      right shoulder
+2                      right elbow
+2                      right hand
+6                      left shoulder
+3                      left elbow 
+3                      left hand
+3                      waist
+3                      right hip
+3                      right knee
+3                      right feet
+3                      left hip
+3                      left knee
+3                      left feet
+
+
+initial positions / bones map examples:
+
+PL0C joints count: 0x13 (19)
+
+PL0C initial positions:
+
+dlabel D_801B4AC4
+    /* B42C4 801B4AC4 00001FF5 */ .word 0xF51F0000  --> root -- {0x00, 0xF51F, 0x00}
+    /* B42C8 801B4AC8 00000000 */ .word 0x00000000  --> lower torso -- {0x00, 0x00, 0x00}
+    /* B42CC 801B4ACC 00000000 */ .word 0x00000000
+    /* B42D0 801B4AD0 4D010000 */ .word 0x0000014D  --> upper torso -- {0x00, 0x00, 0x014D}
+    /* B42D4 801B4AD4 0000B301 */ .word 0x01B30000  --> head -- {0x00, 0x00, 0x01B3}
+    /* B42D8 801B4AD8 00000000 */ .word 0x00000000
+    /* B42DC 801B4ADC 1A010000 */ .word 0x0000011A  --> right shoulder 1  -- {0x0100, 0x00, 0x011A}
+    /* B42E0 801B4AE0 000199FE */ .word 0xFE990100  --> right shoulder 2 -- {0x00, 0x00, 0xFE99}
+    /* B42E4 801B4AE4 00000000 */ .word 0x00000000
+    /* B42E8 801B4AE8 8D02FAFF */ .word 0xFFFA028D  --> right forearm -- {0x00, 0xFFFA, 0x028D}
+    /* B42EC 801B4AEC 00004302 */ .word 0x02430000  --> right hand -- {0x00, 0x05, 0x0243}
+    /* B42F0 801B4AF0 05000000 */ .word 0x00000005
+    /* B42F4 801B4AF4 1A010000 */ .word 0x0000011A  --> left shoulder 1 -- {0xFF00, 0x00, 0x011A}
+    /* B42F8 801B4AF8 00FF6601 */ .word 0x0166FF00  --> left shoulder 2 -- {0x00, 0x00, 0x0166}
+    /* B42FC 801B4AFC 00000000 */ .word 0x00000000
+    /* B4300 801B4B00 8D02FAFF */ .word 0xFFFA028D  --> left forearm -- {0x00, 0xFFFA, 0x028D}
+    /* B4304 801B4B04 00004302 */ .word 0x02430000  --> left hand -- {0x00, 0x05, 0x0243}
+    /* B4308 801B4B08 05000000 */ .word 0x00000005
+    /* B430C 801B4B0C 00000000 */ .word 0x00000000  --> waist -- {0x00, 0x00, 0x00}
+    /* B4310 801B4B10 0000E601 */ .word 0x01E60000  --> right upper leg -- {0x00E6, 0x00, 0x01E6}
+    /* B4314 801B4B14 0000E600 */ .word 0x00E60000
+    /* B4318 801B4B18 A6030500 */ .word 0x000503A6  --> right lower leg -- {0x00, 0x05, 0x03A6}
+    /* B431C 801B4B1C 0000F004 */ .word 0x04F00000  --> right foot -- {0x00, 0xFFFA, 0x04F0}
+    /* B4320 801B4B20 FAFF0000 */ .word 0x0000FFFA
+    /* B4324 801B4B24 E6010000 */ .word 0x000001E6  --> left upper leg -- {0xFF19, 0x00, 0x01E6}
+    /* B4328 801B4B28 19FFA603 */ .word 0x03A6FF19  --> left lower leg -- {0x00, 0x05, 0x03A6}
+    /* B432C 801B4B2C 05000000 */ .word 0x00000005
+    /* B4330 801B4B30 F004FAFF */ .word 0xFFFA04F0  --> left foot -- {0x00, 0xFFFA, 0x04F0}
+    /* B4334 801B4B34 00000000 */ .word 0x00000000  --> end of data (padding)
+.size D_801B4AC4, . - D_801B4AC4
+
+
+PL0C Bone Map:
+
+dlabel D_801B4B38
+    /* B4338 801B4B38 02010C00 */ .word 0x000C0102  --> root -- 0x00
+    /* B433C 801B4B3C 00000000 */ .word 0x00000000
+    /* B4340 801B4B40 01020000 */ .word 0x00000201  --> lower torso -- 0x01
+    /* B4344 801B4B44 00000000 */ .word 0x00000000
+    /* B4348 801B4B48 03030408 */ .word 0x08040303  --> upper torso -- 0x02
+    /* B434C 801B4B4C 00000000 */ .word 0x00000000
+    /* B4350 801B4B50 00000000 */ .word 0x00000000  --> head -- 0x03
+    /* B4354 801B4B54 00000000 */ .word 0x00000000
+    /* B4358 801B4B58 01050000 */ .word 0x00000501  --> right shoulder -- 0x04
+    /* B435C 801B4B5C 00000000 */ .word 0x00000000
+    /* B4360 801B4B60 01060000 */ .word 0x00000601  --> right elbow -- 0x05
+    /* B4364 801B4B64 00000000 */ .word 0x00000000
+    /* B4368 801B4B68 01070000 */ .word 0x00000701  --> right wrist -- 0x06
+    /* B436C 801B4B6C 00000000 */ .word 0x00000000
+    /* B4370 801B4B70 00000000 */ .word 0x00000000  --> right hand -- 0x07
+    /* B4374 801B4B74 00000000 */ .word 0x00000000
+    /* B4378 801B4B78 01090000 */ .word 0x00000901  --> left shoulder -- 0x08
+    /* B437C 801B4B7C 00000000 */ .word 0x00000000
+    /* B4380 801B4B80 010A0000 */ .word 0x00000A01  --> left elbow -- 0x09
+    /* B4384 801B4B84 00000000 */ .word 0x00000000
+    /* B4388 801B4B88 010B0000 */ .word 0x00000B01  --> left wrist -- 0x0A
+    /* B438C 801B4B8C 00000000 */ .word 0x00000000
+    /* B4390 801B4B90 00000000 */ .word 0x00000000  --> left hand -- 0x0B
+    /* B4394 801B4B94 00000000 */ .word 0x00000000
+    /* B4398 801B4B98 020D1000 */ .word 0x00100D02  --> waist / hips -- 0x0C
+    /* B439C 801B4B9C 00000000 */ .word 0x00000000
+    /* B43A0 801B4BA0 010E0000 */ .word 0x00000E01  --> right knee -- 0x0D
+    /* B43A4 801B4BA4 00000000 */ .word 0x00000000
+    /* B43A8 801B4BA8 010F0000 */ .word 0x00000F01  --> right ankle -- 0x0E
+    /* B43AC 801B4BAC 00000000 */ .word 0x00000000
+    /* B43B0 801B4BB0 00000000 */ .word 0x00000000  --> right feet -- 0x0F
+    /* B43B4 801B4BB4 00000000 */ .word 0x00000000
+    /* B43B8 801B4BB8 01110000 */ .word 0x00001101  --> left knee -- 0x10
+    /* B43BC 801B4BBC 00000000 */ .word 0x00000000
+    /* B43C0 801B4BC0 01120000 */ .word 0x00001201  --> left ankle -- 0x11
+    /* B43C4 801B4BC4 00000000 */ .word 0x00000000
+    /* B43C8 801B4BC8 00000000 */ .word 0x00000000  --> left feet -- 0x12
+    /* B43CC 801B4BCC 00000000 */ .word 0x00000000
+
+    /* B43D0 801B4BD0 00000000 */ .word 0x00000000  --> start of unknown data
+       ..... ........ ........
+       ..... ........ ........
+    /* B4464 801B4C64 00020000 */ .word 0x00000200  --> end of unknown data
+.size D_801B4B38, . - D_801B4B38

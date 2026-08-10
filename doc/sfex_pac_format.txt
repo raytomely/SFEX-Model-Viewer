@@ -1,0 +1,25 @@
+SFEX PAC Format:
+
+header:
+The header is an offset table, data follows after.
+each entry in the header is 4-byte long index that point to a data entry
+first 4-byte is first data offset that come after header directly
+
+and here is an example of files extracted from a character pac file:
+
+P0C.PAC:
+0000.bin --> animations ; pac header offset: 0
+0001.bin --> geometry / meshes ; pac header offset: 4
+0002.bin --> shadow ? ; pac header offset: 8
+0003.bin --> tim texture ; pac header offset: 12
+0004.bin --> tim image
+0005.bin --> tim image
+0006.bin --> hit boxes collisons
+0007.bin --> hit boxes collisons
+0008.bin --> ????
+0009.bin --> tim image
+0010.bin --> tim texture
+
+player 1 pac file load address = 0x8004E800
+
+player 2 pac file load address = 0x80098200

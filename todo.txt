@@ -1,0 +1,26 @@
+
+implement frame interpolation for animation type: "0x2"
+these are animations with meta-data flag 0x02
+
+reverse engineer and implement animation type: "0x3"
+these are animations with meta-data flag 0x03 like skullomania's weird animations 40 and 41
+animation meta-data flag 0x03 does change how the games use bones rotations data
+maybe animation meta-data flag 0x03 mean accumulative delta bones rotations ?
+
+reverse engineer extra-dynamic-meshes generation code and implement it
+
+
+stderr when closing windows before cmd console ?
+the stderr issue is triggered by free_model(model) ?
+Hokuto P01: unsupported primitive type 0x20
+D.Dark P03: unsupported primitive type 0x20
+Pullum P04: unsupported primitive type 0x28
+C.Jack P08: unsupported primitive type 0x30
+Garuda P0B: unsupported primitive type 0x20
+some of Hokuto's meshes are composed of only one single primitive (type 0x20) (so only one primitive in count)
+type 0x20 delemiter is FF 00 00 20 or FF FF FF 20 or 05 05 05 20 and its size is 8 words
+type 0x28 delemiter is FF FF C8 28 and its size 10 words
+type 0x30 delemiter is 80 40 00 30 80 40 00 30 80 40 00 30 and its size is 12 words
+those primitives aren't very used and most of them 
+are only used by the last mesh that is not very used by the model
+only Hokuto and Garuda use them in meshes other than the last one
